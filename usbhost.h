@@ -282,6 +282,7 @@ int8_t MAX3421e< SS, INTR >::Init() {
         regWr(rMODE, bmDPPULLDN | bmDMPULLDN | bmHOST); // set pull-downs, Host
 
         regWr(rHIEN, bmCONDETIE | bmFRAMEIE); //connection detection
+        regWr(rHIEN, bmCONDETIE); //connection detection
 
         /* check if device is connected */
         regWr(rHCTL, bmSAMPLEBUS); // sample USB bus
