@@ -510,9 +510,17 @@ void USB::Task(void) //USB state machine
                         rcode = Configuring(0, 0, lowspeed);
 
                         if (rcode) {
+                        	if (rcode == USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET) {
+                                usb_error = rcode;
+                				Serial.print("State Configuring error ");
+                				Serial.println(usb_error, HEX);
+                                usb_task_state = USB_ATTACHED_SUBSTATE_RESET_DEVICE;
+                                break;
+                        	}
                                 if (rcode != USB_DEV_CONFIG_ERROR_DEVICE_INIT_INCOMPLETE) {
                                         usb_error = rcode;
                                         usb_task_state = USB_STATE_ERROR;
+                                        MAX3421E::Init();
                                 }
                         } else
                                 usb_task_state = USB_STATE_RUNNING;
@@ -571,21 +579,28 @@ uint8_t USB::AttemptConfig(uint8_t driver, uint8_t parent, uint8_t port, bool lo
 
 again:
         uint8_t rcode = devConfig[driver]->ConfigureDevice(parent, port, lowspeed);
-        if (rcode == USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET) {
-                if (parent == 0) {
-                        // Send a bus reset on the root interface.
-                        regWr(rHCTL, bmBUSRST); //issue bus reset
-                        delay(102); // delay 102ms, compensate for clock inaccuracy.
-                } else {
-                        // reset parent port
-                        devConfig[parent]->ResetHubPort(port);
-                }
-        } else if (rcode == hrJERR && retries < 3) { // Some devices returns this when plugged in - trying to initialize the device again usually works
+        if (rcode == hrJERR && retries < 3) { // Some devices returns this when plugged in - trying to initialize the device again usually works
                 delay(100);
                 retries++;
                 goto again;
-        } else if (rcode)
-                return rcode;
+        } else if (rcode) {
+        	rcode = USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET;
+            if (rcode == USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET) {
+                    if (parent == 0) {
+                            // Send a bus reset on the root interface.
+                       //     regWr(rHCTL, bmBUSRST); //issue bus reset
+                       //     delay(102); // delay 102ms, compensate for clock inaccuracy.
+                    } else {
+                            // reset parent port
+                            devConfig[parent]->ResetHubPort(port);
+                    }
+                	Serial.println("ConfigureDevice returned USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET");
+                    return USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET;
+            }
+        	Serial.print("rcode: ");
+        	Serial.println(rcode);
+            return rcode;
+        }
 
         rcode = devConfig[driver]->Init(parent, port, lowspeed);
         if (rcode == hrJERR && retries < 3) { // Some devices returns this when plugged in - trying to initialize the device again usually works

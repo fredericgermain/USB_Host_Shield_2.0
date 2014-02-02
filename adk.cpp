@@ -56,6 +56,9 @@ ready(false) {
 }
 
 uint8_t ADK::ConfigureDevice(uint8_t parent, uint8_t port, bool lowspeed) {
+	if (accessoryMode)
+		return 0;
+
         return Init(parent, port, lowspeed); // Just call Init. Yes, really!
 }
 
@@ -241,8 +244,9 @@ uint8_t ADK::Init(uint8_t parent, uint8_t port, bool lowspeed) {
         if (rcode) {
                 goto FailSwAcc; //init fails
         }
+        accessoryMode = true;
         rcode = USB_ERROR_CONFIG_REQUIRES_ADDITIONAL_RESET;
-        delay(1000); // Give Android a chance to do its reset. This is a guess, and possibly could be lower.
+        //delay(1000); // Give Android a chance to do its reset. This is a guess, and possibly could be lower.
         goto SwAttempt; //switch to accessory mode attempted
 
         /* diagnostic messages */

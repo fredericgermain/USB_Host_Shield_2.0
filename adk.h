@@ -60,6 +60,8 @@ private:
         const char* uri;
         const char* serial;
 
+        bool accessoryMode;
+
         /* ADK proprietary requests */
         uint8_t getProto(uint8_t* adkproto);
         uint8_t sendStr(uint8_t index, const char* str);
