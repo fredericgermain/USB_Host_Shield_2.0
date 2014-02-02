@@ -134,8 +134,11 @@ uint8_t USB::ctrlReq(uint8_t addr, uint8_t ep, uint8_t bmReqType, uint8_t bReque
 
         rcode = SetAddress(addr, ep, &pep, nak_limit);
 
-        if (rcode)
+        if (rcode) {
+        	Serial.print("ctrlReq SetAddress rcode:");
+        	Serial.println(rcode, HEX);
                 return rcode;
+        }
 
         direction = ((bmReqType & 0x80) > 0);
 
@@ -151,8 +154,11 @@ uint8_t USB::ctrlReq(uint8_t addr, uint8_t ep, uint8_t bmReqType, uint8_t bReque
 
         rcode = dispatchPkt(tokSETUP, ep, nak_limit); //dispatch packet
 
-        if (rcode) //return HRSLT if not zero
-                return ( rcode);
+        if (rcode) { //return HRSLT if not zero
+        	Serial.print("ctrlReq dispatchPkt rcode:");
+        	Serial.println(rcode, HEX);
+                return rcode;
+        }
 
         if (dataptr != NULL) //data stage, if present
         {
@@ -174,8 +180,11 @@ uint8_t USB::ctrlReq(uint8_t addr, uint8_t ep, uint8_t bmReqType, uint8_t bReque
                                         continue;
                                 }
 
-                                if (rcode)
+                                if (rcode) {
+                                	Serial.print("ctrlReq InTransfer rcode:");
+                                	Serial.println(rcode, HEX);
                                         return rcode;
+                                }
 
                                 // Invoke callback function if inTransfer completed successfully and callback function pointer is specified
                                 if (!rcode && p)
@@ -191,8 +200,11 @@ uint8_t USB::ctrlReq(uint8_t addr, uint8_t ep, uint8_t bmReqType, uint8_t bReque
                         pep->bmSndToggle = 1; //bmSNDTOG1;
                         rcode = OutTransfer(pep, nak_limit, nbytes, dataptr);
                 }
-                if (rcode) //return error
-                        return ( rcode);
+                if (rcode) { //return error
+                	Serial.print("ctrlReq loop rcode:");
+                	Serial.println(rcode, HEX);
+                        return rcode;
+                }
         }
         // Status stage
         return dispatchPkt((direction) ? tokOUTHS : tokINHS, ep, nak_limit); //GET if direction
@@ -237,7 +249,11 @@ uint8_t USB::InTransfer(EpInfo *pep, uint16_t nak_limit, uint16_t *nbytesptr, ui
                         continue;
                 }
                 if (rcode) {
-                        //printf(">>>>>>>> Problem! dispatchPkt %2.2x\r\n", rcode);
+                	if (hrNAK != rcode) {
+                		Serial.print(">>>>>>>> Problem! dispatchPkt ");
+                		Serial.print(rcode);
+                		Serial.print("\r\n");
+                	}
                         break; //should be 0, indicating ACK. Else return error code.
                 }
                 /* check for RCVDAVIRQ and generate error if not present */
@@ -245,10 +261,13 @@ uint8_t USB::InTransfer(EpInfo *pep, uint16_t nak_limit, uint16_t *nbytesptr, ui
                 if ((regRd(rHIRQ) & bmRCVDAVIRQ) == 0) {
                         //printf(">>>>>>>> Problem! NO RCVDAVIRQ!\r\n");
                         rcode = 0xf0; //receive error
+                		Serial.println(">>>>>>>> Problem! dispatchPkt bmRCVDAVIRQ ");
                         break;
                 }
                 pktsize = regRd(rRCVBC); //number of received bytes
-                //printf("Got %i bytes \r\n", pktsize);
+                Serial.print("InTransfer: Got ");
+                Serial.print(pktsize);
+                Serial.print(" bytes\r\n");
                 // This would be OK, but...
                 //assert(pktsize <= nbytes);
                 if (pktsize > nbytes) {
@@ -379,6 +398,12 @@ uint8_t USB::dispatchPkt(uint8_t token, uint8_t ep, uint16_t nak_limit) {
         uint16_t nak_count = 0;
 
         while (timeout > millis()) {
+#if 0
+        	Serial.print(timeout);
+        	Serial.print(" " );
+        	Serial.print(millis());
+        	Serial.println("dispatchPkt");
+#endif
                 regWr(rHXFR, (token | ep)); //launch the transfer
                 rcode = USB_ERROR_TRANSFER_TIMEOUT;
 
@@ -504,7 +529,7 @@ void USB::Task(void) //USB state machine
                         else break;  // don't fall through
                 case USB_STATE_CONFIGURING:
 
-                				//Serial.print("\r\nConf.LS: ");
+                				//Serial.print("State Configuring lowspeed:");
                 				//Serial.println(lowspeed, HEX);
 
                         rcode = Configuring(0, 0, lowspeed);
@@ -519,6 +544,8 @@ void USB::Task(void) //USB state machine
                         	}
                                 if (rcode != USB_DEV_CONFIG_ERROR_DEVICE_INIT_INCOMPLETE) {
                                         usb_error = rcode;
+                        				Serial.print("State Configuring error ");
+                        				Serial.println(usb_error, HEX);
                                         usb_task_state = USB_STATE_ERROR;
                                         MAX3421E::Init();
                                 }
@@ -577,6 +604,7 @@ uint8_t USB::AttemptConfig(uint8_t driver, uint8_t parent, uint8_t port, bool lo
         //printf("AttemptConfig: parent = %i, port = %i\r\n", parent, port);
         uint8_t retries = 0;
 
+    	Serial.println("AttemptConfig ConfigureDevice...");
 again:
         uint8_t rcode = devConfig[driver]->ConfigureDevice(parent, port, lowspeed);
         if (rcode == hrJERR && retries < 3) { // Some devices returns this when plugged in - trying to initialize the device again usually works
@@ -606,6 +634,8 @@ again:
         if (rcode == hrJERR && retries < 3) { // Some devices returns this when plugged in - trying to initialize the device again usually works
                 delay(100);
                 retries++;
+            	Serial.print("retries: ");
+            	Serial.println(retries);
                 goto again;
         }
         if (rcode) {
@@ -619,6 +649,9 @@ again:
                         devConfig[parent]->ResetHubPort(port);
                 }
         }
+    	Serial.print("AttemptConfig rcodeend:");
+    	Serial.print(rcode);// hrSTALL
+    	Serial.println(" (5 == hrSTALL)");
         return rcode;
 }
 
@@ -677,12 +710,15 @@ uint8_t USB::Configuring(uint8_t parent, uint8_t port, bool lowspeed) {
         epInfo.epAttribs = 0;
         epInfo.bmNakPower = USB_NAK_MAX_POWER;
 
+		Serial.print("Configuring @");
+		Serial.println(millis());
+
         //delay(2000);
         AddressPool &addrPool = GetAddressPool();
         // Get pointer to pseudo device with address 0 assigned
         p = addrPool.GetUsbDevicePtr(0);
         if (!p) {
-                //printf("Configuring error: USB_ERROR_ADDRESS_NOT_FOUND_IN_POOL\r\n");
+        	Serial.println("Configuring error: USB_ERROR_ADDRESS_NOT_FOUND_IN_POOL\r\n");
                 return USB_ERROR_ADDRESS_NOT_FOUND_IN_POOL;
         }
 
@@ -702,7 +738,8 @@ uint8_t USB::Configuring(uint8_t parent, uint8_t port, bool lowspeed) {
         p->epinfo = oldep_ptr;
 
         if (rcode) {
-                //printf("Configuring error: Can't get USB_DEVICE_DESCRIPTOR\r\n");
+                Serial.print("Configuring error: Can't get USB_DEVICE_DESCRIPTOR at ");
+        		Serial.println(millis());
                 return rcode;
         }
 
@@ -721,14 +758,25 @@ uint8_t USB::Configuring(uint8_t parent, uint8_t port, bool lowspeed) {
         for (devConfigIndex = 0; devConfigIndex < USB_NUMDEVICES; devConfigIndex++) {
                 if (!devConfig[devConfigIndex]) continue; // no driver
                 if (devConfig[devConfigIndex]->GetAddress()) continue; // consumed
+            	Serial.print("testing device #");
+            	Serial.print(devConfigIndex);
+            	Serial.print(" VIDPID match ");
+            	Serial.print(vid, HEX);
+            	Serial.print(",");
+            	Serial.println(pid, HEX);
                 if (devConfig[devConfigIndex]->VIDPIDOK(vid, pid) || devConfig[devConfigIndex]->DEVCLASSOK(klass)) {
+                		Serial.println("VIDPID match, call AttemptConfig");
                         rcode = AttemptConfig(devConfigIndex, parent, port, lowspeed);
+                    	Serial.print("rcode from AttemptConfig: ");
+                    	Serial.println(rcode, HEX);
                         if (rcode != USB_DEV_CONFIG_ERROR_DEVICE_NOT_SUPPORTED)
                                 break;
                 }
         }
 
         if (devConfigIndex < USB_NUMDEVICES) {
+        	Serial.print("AttemptConfig done with ");
+        	Serial.println(devConfigIndex, HEX);
                 return rcode;
         }
 
@@ -738,6 +786,9 @@ uint8_t USB::Configuring(uint8_t parent, uint8_t port, bool lowspeed) {
                 if (!devConfig[devConfigIndex]) continue;
                 if (devConfig[devConfigIndex]->GetAddress()) continue; // consumed
                 if (devConfig[devConfigIndex]->VIDPIDOK(vid, pid) || devConfig[devConfigIndex]->DEVCLASSOK(klass)) continue; // If this is true it means it must have returned USB_DEV_CONFIG_ERROR_DEVICE_NOT_SUPPORTED above
+
+        		Serial.print("blindly call AttemptConfig at ");
+        		Serial.println(millis());
                 rcode = AttemptConfig(devConfigIndex, parent, port, lowspeed);
 
                 //printf("ERROR ENUMERATING %2.2x\r\n", rcode);
@@ -747,12 +798,16 @@ uint8_t USB::Configuring(uint8_t parent, uint8_t port, bool lowspeed) {
                         //		next time the program gets here
                         //if (rcode != USB_DEV_CONFIG_ERROR_DEVICE_INIT_INCOMPLETE)
                         //        devConfigIndex = 0;
+                	Serial.print("blindly call AttemptConfig rcode: ");
+                	Serial.println(rcode);
                         return rcode;
                 }
         }
         // if we get here that means that the device class is not supported by any of registered classes
         rcode = DefaultAddressing(parent, port, lowspeed);
 
+    	Serial.print("DefaultAddressing rcode:");
+    	Serial.println(rcode, HEX);
         return rcode;
 }
 

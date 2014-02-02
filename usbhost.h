@@ -51,6 +51,10 @@ public:
                 MISO::SetDirRead();
                 SPI_SS::SetDirWrite();
                 /* mode 00 (CPOL=0, CPHA=0) master, fclk/2. Mode 11 (CPOL=11, CPHA=11) is also supported by MAX3421E */
+                Serial.print("SPCR Ox");
+                Serial.println(SPCR, HEX);
+                Serial.print("SPSR Ox");
+                Serial.println(SPSR, HEX);
                 SPCR = 0x50;
                 SPSR = 0x01; // 0x01
                 /**/
@@ -345,6 +349,8 @@ template< typename SS, typename INTR >
 void MAX3421e< SS, INTR >::busprobe() {
         uint8_t bus_sample;
         bus_sample = regRd(rHRSL); //Get J,K status
+        //Serial.print("MAX3421e::busprobe rHRSL:");
+        //Serial.println(rHRSL, HEX);
         bus_sample &= (bmJSTATUS | bmKSTATUS); //zero the rest of the byte
         switch(bus_sample) { //start full-speed or low-speed host
                 case( bmJSTATUS):
@@ -404,8 +410,14 @@ uint8_t MAX3421e< SS, INTR >::IntHandler() {
         //    HIRQ_sendback |= bmFRAMEIRQ;
         //}//end FRAMEIRQ handling
         if(HIRQ & bmCONDETIRQ) {
+            Serial.print("IntHandler(bmCONDETIRQ) @");
+            Serial.println(millis());
                 busprobe();
                 HIRQ_sendback |= bmCONDETIRQ;
+        } else if (HIRQ) {
+            Serial.print("IntHandler ");
+            Serial.println(HIRQ, HEX);
+
         }
         /* End HIRQ interrupts handling, clear serviced IRQs    */
         regWr(rHIRQ, HIRQ_sendback);
